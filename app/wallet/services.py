@@ -1,6 +1,6 @@
 from typing import Tuple
 
-from wallet.models import users, wallets
+from wallet.models import users, wallets, deposits, transfers
 from wallet.exceptions import WalletExists, UserExists, InsufficientBalance
 from wallet.schemas import User
 from databases import Database
@@ -49,14 +49,18 @@ async def make_deposit(db: Database, wallet_id: int, amount: Decimal) -> Decimal
     """
     Make deposit to wallet (wallet_id) by some amount (amount).
     """
-    query = (
-        update(wallets)
-            .where(wallets.c.id == wallet_id)
-            .values(balance=(wallets.c.balance + amount))
-            .returning(wallets.c.balance)
-    )
-    new_balance = await db.execute(query)
-    return new_balance
+    async with db.transaction():
+        query = (
+            update(wallets)
+                .where(wallets.c.id == wallet_id)
+                .values(balance=(wallets.c.balance + amount))
+                .returning(wallets.c.balance)
+        )
+        new_balance = await db.execute(query)
+
+        await db.execute(deposits.insert().values(wallet_id=wallet_id, amount=amount))
+
+        return new_balance
 
 
 async def make_transfer(
@@ -93,5 +97,7 @@ async def make_transfer(
         )
         res = await db.fetch_all(query)
         res_dict = {r['id']: r['balance'] for r in res}
+
+        await db.execute(transfers.insert().values(src_id=src_id, dest_id=dest_id, amount=amount))
 
         return res_dict[src_id], res_dict[dest_id]

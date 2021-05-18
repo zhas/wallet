@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from wallet.services import create_user, create_wallet, make_deposit, make_transfer
 from wallet.schemas import User
-from wallet.models import users, wallets
+from wallet.models import users, wallets, deposits, transfers
 from wallet.exceptions import UserExists, WalletExists, InsufficientBalance
 
 from sqlalchemy import select
@@ -59,6 +59,11 @@ async def test_make_deposit(db, client):
 
     assert balance == 150.5
 
+    # check logs
+    res = await db.fetch_one(select([deposits]))
+    assert res['wallet_id'] == wallet_id
+    assert res['amount'] == 150.5
+
 
 async def test_make_transfer(db, client):
     user_id = await db.execute(users.insert().values(username="pete"))
@@ -77,6 +82,12 @@ async def test_make_transfer(db, client):
     res_dict = {r['id']: r['balance'] for r in res}
     assert res_dict[wallet_id] == 20
     assert res_dict[wallet2_id] == 80
+
+    # check logs
+    res = await db.fetch_one(select([transfers]))
+    assert res['src_id'] == wallet_id
+    assert res['dest_id'] == wallet2_id
+    assert res['amount'] == 50
 
     # check insufficient balance
     with pytest.raises(InsufficientBalance):
