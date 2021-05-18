@@ -1,8 +1,8 @@
 """first models
 
-Revision ID: 02d81f30877e
-Revises: f2f4d5ed308c
-Create Date: 2021-05-17 20:27:46.057859
+Revision ID: 6936a3adeaab
+Revises: 60a7daca7c65
+Create Date: 2021-05-18 17:41:20.366678
 
 """
 from alembic import op
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '02d81f30877e'
-down_revision = 'f2f4d5ed308c'
+revision = '6936a3adeaab'
+down_revision = '60a7daca7c65'
 branch_labels = None
 depends_on = None
 
@@ -23,7 +23,9 @@ def upgrade():
     sa.Column('username', sa.String(length=50), nullable=True),
     sa.Column('created', sa.DateTime(), nullable=True),
     sa.Column('updated', sa.DateTime(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_users')),
+    sa.UniqueConstraint('username'),
+    sa.UniqueConstraint('username', name=op.f('uq_users_username'))
     )
     op.create_index(op.f('ix_users_id'), 'users', ['id'], unique=False)
     op.create_table('wallets',
@@ -32,8 +34,8 @@ def upgrade():
     sa.Column('balance', sa.Numeric(precision=12, scale=2), nullable=False),
     sa.Column('created', sa.DateTime(), nullable=True),
     sa.Column('updated', sa.DateTime(), nullable=True),
-    sa.ForeignKeyConstraint(['owner_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.ForeignKeyConstraint(['owner_id'], ['users.id'], name=op.f('fk_wallets_owner_id_users')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_wallets'))
     )
     op.create_index(op.f('ix_wallets_id'), 'wallets', ['id'], unique=False)
     op.create_table('deposits',
@@ -41,8 +43,8 @@ def upgrade():
     sa.Column('wallet_id', sa.Integer(), nullable=False),
     sa.Column('amount', sa.Numeric(precision=12, scale=2), nullable=False),
     sa.Column('created', sa.DateTime(), nullable=True),
-    sa.ForeignKeyConstraint(['wallet_id'], ['wallets.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.ForeignKeyConstraint(['wallet_id'], ['wallets.id'], name=op.f('fk_deposits_wallet_id_wallets')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_deposits'))
     )
     op.create_index(op.f('ix_deposits_id'), 'deposits', ['id'], unique=False)
     op.create_table('transfers',
@@ -51,9 +53,9 @@ def upgrade():
     sa.Column('dest_id', sa.Integer(), nullable=False),
     sa.Column('amount', sa.Numeric(precision=12, scale=2), nullable=False),
     sa.Column('created', sa.DateTime(), nullable=True),
-    sa.ForeignKeyConstraint(['dest_id'], ['wallets.id'], ),
-    sa.ForeignKeyConstraint(['src_id'], ['wallets.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.ForeignKeyConstraint(['dest_id'], ['wallets.id'], name=op.f('fk_transfers_dest_id_wallets')),
+    sa.ForeignKeyConstraint(['src_id'], ['wallets.id'], name=op.f('fk_transfers_src_id_wallets')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_transfers'))
     )
     op.create_index(op.f('ix_transfers_id'), 'transfers', ['id'], unique=False)
     # ### end Alembic commands ###

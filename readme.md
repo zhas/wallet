@@ -1,6 +1,6 @@
 This is implementation of test assignment. 
 
-The goal is to implement basic payment system with next
+The goal is to implement basic payment system with following
 requirements:
 
 - system should handle large number of requests and stay consistent

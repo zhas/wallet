@@ -16,3 +16,7 @@ class WalletNotFound(WalletException):
 
 class WalletExists(WalletException):
     err_code = 409
+
+
+class InsufficientBalance(WalletException):
+    err_code = 400
