@@ -67,3 +67,12 @@ The goal is to implement basic payment system with following requirements:
 ```
 docker-compose up
 ```
+
+Swagger: http://localhost:8000/docs
+
+
+Endpoints: 
+  - create-user POST http://localhost:8000/v1/user/
+  - create-wallet POST http://localhost:8000/v1/wallet/
+  - deposit POST http://localhost:8000/v1/wallet/deposit/
+  - transfer POST http://localhost:8000/v1/wallet/transfer/
