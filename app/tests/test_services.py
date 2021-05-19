@@ -2,9 +2,10 @@ import pytest
 from decimal import Decimal
 
 from wallet.services import create_user, create_wallet, make_deposit, make_transfer
-from wallet.schemas import User
 from wallet.models import users, wallets, deposits, transfers
-from wallet.exceptions import UserExists, WalletExists, InsufficientBalance
+from wallet.exceptions import (
+    UserExists, WalletExists, InsufficientBalance, UserNotFound, WalletNotFound
+)
 
 from sqlalchemy import select
 
@@ -14,9 +15,7 @@ from sqlalchemy.sql.expression import func
 
 
 async def test_create_user(db, client):
-    user = User(username="pete")
-
-    user_id = await create_user(db, user)
+    user_id = await create_user(db, "pete")
     assert user_id is not None
 
     # check user created
@@ -28,7 +27,7 @@ async def test_create_user(db, client):
 
     # check user exists
     with pytest.raises(UserExists):
-        await create_user(db, user)
+        await create_user(db, "pete")
 
 
 async def test_create_wallet(db, client):
@@ -44,9 +43,13 @@ async def test_create_wallet(db, client):
     assert len(res) == 1
     assert res[0]['balance'] == 0
 
-    #  check wallet exists
+    # case: wallet exists
     with pytest.raises(WalletExists):
         await create_wallet(db, user_id)
+
+    # case: user doesn't exist
+    with pytest.raises(UserNotFound):
+        await create_wallet(db, 123455)
 
 
 async def test_make_deposit(db, client):
@@ -63,6 +66,10 @@ async def test_make_deposit(db, client):
     res = await db.fetch_one(select([deposits]))
     assert res['wallet_id'] == wallet_id
     assert res['amount'] == 150.5
+
+    # case: wallet_id doesn't exist
+    with pytest.raises(WalletNotFound):
+        await make_deposit(db, 9999, Decimal(150.5))
 
 
 async def test_make_transfer(db, client):
@@ -89,6 +96,14 @@ async def test_make_transfer(db, client):
     assert res['dest_id'] == wallet2_id
     assert res['amount'] == 50
 
-    # check insufficient balance
+    # case: insufficient balance
     with pytest.raises(InsufficientBalance):
         await make_transfer(db, wallet_id, wallet2_id, Decimal(100))
+
+    # case: src_id not found
+    with pytest.raises(WalletNotFound):
+        await make_transfer(db, 1234, wallet2_id, Decimal(100))
+
+    # case: dest_id not found
+    with pytest.raises(WalletNotFound):
+        await make_transfer(db, wallet_id, 9999, Decimal(100))

@@ -1,30 +1,32 @@
 from typing import Tuple
 
 from wallet.models import users, wallets, deposits, transfers
-from wallet.exceptions import WalletExists, UserExists, InsufficientBalance
-from wallet.schemas import User
+from wallet.exceptions import (
+    WalletExists, UserExists, InsufficientBalance, UserNotFound, WalletNotFound
+)
 from databases import Database
 from decimal import Decimal
-from asyncpg.exceptions import UniqueViolationError
+from asyncpg.exceptions import UniqueViolationError, ForeignKeyViolationError
 from sqlalchemy import select, update, case
 
 
-async def create_user(db: Database, user: User) -> int:
+async def create_user(db: Database, username: str) -> int:
     """
     Create user if not exists else raise exception.
     Check uniqueness via insert/catch instead of select/insert,
     because its prevents race conditions.
     """
-    query = users.insert().values(username=user.username)
+    async with db.transaction():
+        query = users.insert().values(username=username)
 
-    try:
-        user_id = await db.execute(query)
-    except UniqueViolationError as e:
-        if e.constraint_name == "uq_users_username":
-            raise UserExists(f"User with username={user.username} already exists")
-        raise
-    else:
-        return user_id
+        try:
+            user_id = await db.execute(query)
+        except UniqueViolationError as e:
+            if e.constraint_name == "uq_users_username":
+                raise UserExists(f"User with username={username} already exists")
+            raise
+        else:
+            return user_id
 
 
 async def create_wallet(db: Database, owner_id: int) -> int:
@@ -33,16 +35,21 @@ async def create_wallet(db: Database, owner_id: int) -> int:
     Check uniqueness via insert/catch instead of select/insert,
     because its prevents race conditions.
     """
+    async with db.transaction():
+        query = wallets.insert().values(owner_id=owner_id, balance=0)
 
-    query = wallets.insert().values(owner_id=owner_id, balance=0)
-    try:
-        wallet_id = await db.execute(query)
-    except UniqueViolationError as e:
-        if e.constraint_name == "uq_wallets_owner_id":
-            raise WalletExists(f"Wallet with owner_id={owner_id} already exists")
-        raise
-    else:
-        return wallet_id
+        try:
+            wallet_id = await db.execute(query)
+        except UniqueViolationError as e:
+            if e.constraint_name == "uq_wallets_owner_id":
+                raise WalletExists(f"Wallet with owner_id={owner_id} already exists")
+            raise
+        except ForeignKeyViolationError as e:
+            if e.constraint_name == "fk_wallets_owner_id_users":
+                raise UserNotFound(f"User with id={owner_id} not found")
+            raise
+        else:
+            return wallet_id
 
 
 async def make_deposit(db: Database, wallet_id: int, amount: Decimal) -> Decimal:
@@ -56,11 +63,17 @@ async def make_deposit(db: Database, wallet_id: int, amount: Decimal) -> Decimal
                 .values(balance=(wallets.c.balance + amount))
                 .returning(wallets.c.balance)
         )
+
         new_balance = await db.execute(query)
 
-        await db.execute(deposits.insert().values(wallet_id=wallet_id, amount=amount))
-
-        return new_balance
+        try:
+            await db.execute(deposits.insert().values(wallet_id=wallet_id, amount=amount))
+        except ForeignKeyViolationError as e:
+            if e.constraint_name == "fk_deposits_wallet_id_wallets":
+                raise WalletNotFound(f"Wallet with id={wallet_id} not found")
+            raise
+        else:
+            return new_balance
 
 
 async def make_transfer(
@@ -79,7 +92,11 @@ async def make_transfer(
 
         res = await db.fetch_all(query)
         res_dict = {r['id']: r['balance'] for r in res}
-        src_balance, dest_balance = res_dict[src_id], res_dict[dest_id]
+
+        try:
+            src_balance, dest_balance = res_dict[src_id], res_dict[dest_id]
+        except KeyError as e:
+            raise WalletNotFound(f"Wallet with id={e.args[0]} not found")
 
         if src_balance - amount < 0:
             raise InsufficientBalance(f"Insufficient balance{src_balance} for this operation")

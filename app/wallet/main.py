@@ -1,9 +1,9 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
-from wallet.dependencies import get_db
 from wallet.db import init_db
-from wallet import schemas
-from wallet import services
+from wallet.api.v1.endpoints import router as v1_router
+from wallet.exceptions import WalletException
 
 
 def get_application():
@@ -19,13 +19,14 @@ def get_application():
     async def disconnect():
         await app.state._db.disconnect()
 
+    @app.exception_handler(WalletException)
+    async def exception_handler(request, exc: WalletException):
+        return JSONResponse({"message": str(exc)}, status_code=exc.status_code)
+
+    app.include_router(v1_router, prefix="/v1")
+
     return app
 
 
 app = get_application()
 
-
-@app.post("/user/", status_code=201)
-async def create_user(user: schemas.User, db=Depends(get_db)):
-    user_id = await services.create_user(db, user)
-    return user_id
